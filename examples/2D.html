@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RL Agents - 2D Grid Navigation Training</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #1a1a1a;
+      font-family: 'Arial', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: #fff;
+    }
+    
+    .container {
+      display: flex;
+      gap: 30px;
+      padding: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
+    .agent-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      border-radius: 10px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .agent-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: #4a9eff;
+    }
+    
+    .grid {
+      display: inline-grid;
+      grid-template-columns: repeat(5, 60px);
+      gap: 3px;
+      background: #000;
+      padding: 8px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    
+    .cell {
+      width: 60px;
+      height: 60px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .cell.goal {
+      background: #4caf50;
+      color: #fff;
+    }
+    
+    .cell.obstacle {
+      background: #f44336;
+      color: #fff;
+    }
+    
+    .agent-marker {
+      position: absolute;
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #fff;
+      font-weight: bold;
+      animation: pulse 0.3s;
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1.2); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    .ql-agent {
+      background: #2196F3;
+    }
+    .sarsa-agent {
+        background: #FF9800;
+      font-size: 13px;
+      line-height: 2;
+    }
+    
+    .stat-item {
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      margin: 5px 0;
+      border-radius: 4px;
+      border-left: 3px solid #4a9eff;
+    }
+    
+    .stat-label {
+      font-weight: bold;
+      color: #aaa;
+    }
+    
+    .stat-value {
+      color: #4a9eff;
+      font-weight: bold;
+    }
+    
+    .controls {
+      width: 280px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    
+    button {
+      padding: 12px 15px;
+      background: #4a9eff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+    
+    button:hover {
+      background: #2980ff;
+      transform: translateY(-2px);
+    }
+    
+    button:active {
+      transform: scale(0.98);
+    }
+    
+    button:disabled {
+      background: #666;
+      cursor: not-1px;
+      margin-top: 10px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 5px;
+      text-align: center;
+      margin: 10px 0;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4a9eff, #2196F3);
+      width: 0%;
+      transition: width 0.2s;
+    }
+    
+    .chart-container {
+      width: 280px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 5px;
+      padding: 10px;
+      position: relative;
+      margin-top: 15px;
+      width: 250px;
+      height: 150px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 5px;
+      padding: 10px;
+      position: relative;
+    }
+    
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .legend {
+      font-size: 12px;
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 5px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Q-Learning Agent -->
+    <div class="agent-container">
+      <div class="agent-title">Q-Learning Agent</div>
+      
+      <div class="grid" id="gridQL"></div>
+      
+      <div class="stats">
+        <div class="stat-item"><span class="stat-label">Episode:</span> <span class="stat-value" id="epQL">0</span></div>
+        <div class="stat-item"><span class="stat-label">Position:</span> <span class="stat-value" id="posQL">0,0</span></div>
+        <div class="stat-item"><span class="stat-label">Step Reward:</span> <span class="stat-value" id="rewQL">0</span></div>
+        <div class="stat-item"><span class="stat-label">Episode Total:</span> <span class="stat-value" id="episodeRL">0</span></div>
+      </div>
+      
+      <div class="training-status">
+        <div style="margin-bottom: 8px;">Training Progress</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressQL"></div></div>
+        <div id="statusQL">Ready</div>
+      </div>
+      
+      <div class="controls">
+        <button id="btnTrainQL" onclick="startTraining('ql', 100)">Auto-Train 100 Episodes</button>
+        <button id="btnStopQL" onclick="stopTraining('ql')" style="display: none; background: #ff6b6b;">Stop Training</button>
+        <button onclick="resetQL()">Reset Agent</button>
+      </div>
+      
+      <div class="chart-container">
+        <canvas id="chartQL"></canvas>
+      </div>
+    </div>
+    
+    <!-- SARSA Agent -->
+    <div class="agent-container">
+      <div class="agent-title">SARSA Agent</div>
+      
+      <div class="grid" id="gridSARSA"></div>
+      
+      <div class="stats">
+        <div class="stat-item"><span class="stat-label">Episode:</span> <span class="stat-value" id="epSARSA">0</span></div>
+        <div class="stat-item"><span class="stat-label">Position:</span> <span class="stat-value" id="posSARSA">0,0</span></div>
+        <div class="stat-item"><span class="stat-label">Step Reward:</span> <span class="stat-value" id="rewSARSA">0</span></div>
+        <div class="stat-item"><span class="stat-label">Episode Total:</span> <span class="stat-value" id="episodeRS">0</span></div>
+      </div>
+      
+      <div class="training-status">
+        <div style="margin-bottom: 8px;">Training Progress</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressSARSA"></div></div>
+        <div id="statusSARSA">Ready</div>
+      </div>
+      
+      <div class="controls">
+        <button id="btnTrainSARSA" onclick="startTraining('sarsa', 100)">Auto-Train 100 Episodes</button>
+        <button id="btnStopSARSA" onclick="stopTraining('sarsa')" style="display: none; background: #ff6b6b;">Stop Training</button>
+        <button onclick="resetSARSA()">Reset Agent</button>
+      </div>
+      
+      <div class="chart-container">
+        <canvas id="chartSARSA"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script src="../RLAgents.js"></script>
+  
+  <script>
+    // Configuration
+    const GRID_WIDTH = 5;
+    const GRID_HEIGHT = 5;
+    const GOAL_POS = { x: 4, y: 4 };
+    const OBSTACLES = [{ x: 2, y: 2 }, { x: 2, y: 3 }, { x: 3, y: 2 }];
+    const ACTIONS = ['up', 'down', 'left', 'right'];
+    
+    // Training control
+    const trainingState = {
+      ql: { running: false, totalEpisodes: 0, currentEpisode: 0 },
+      sarsa: { running: false, totalEpisodes: 0, currentEpisode: 0 }
+    };
+    
+    // Helper functions
+    function createGrid(gridId) {
+      const grid = document.getElementById(gridId);
+      grid.innerHTML = '';
+      for (let y = 0; y < GRID_HEIGHT; y++) {
+        for (let x = 0; x < GRID_WIDTH; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.id = `${gridId}-cell-${x}-${y}`;
+          
+          if (x === GOAL_POS.x && y === GOAL_POS.y) {
+            cell.classList.add('goal');
+            cell.textContent = '🎯';
+          } else if (OBSTACLES.some(o => o.x === x && o.y === y)) {
+            cell.classList.add('obstacle');
+            cell.textContent = '🚫';
+          }
+          
+          grid.appendChild(cell);
+        }
+      }
+    }
+    
+    function updateGrid(gridId, position) {
+      // Clear all agents
+      document.querySelectorAll(`#${gridId} .agent-marker`).forEach(el => el.remove());
+      
+      // Place agent
+      const cell = document.getElementById(`${gridId}-cell-${position.x}-${position.y}`);
+      if (cell) {
+        const marker = document.createElement('div');
+        marker.className = 'agent-marker ' + (gridId === 'gridQL' ? 'ql-agent' : 'sarsa-agent');
+        marker.textContent = gridId === 'gridQL' ? 'Q' : 'S';
+        cell.appendChild(marker);
+      }
+    }
+    
+    function moveAgent(state, action) {
+      const newState = { ...state };
+      switch (action) {
+        case 'up': newState.y = Math.max(0, state.y - 1); break;
+        case 'down': newState.y = Math.min(GRID_HEIGHT - 1, state.y + 1); break;
+        case 'left': newState.x = Math.max(0, state.x - 1); break;
+        case 'right': newState.x = Math.min(GRID_WIDTH - 1, state.x + 1); break;
+      }
+      return newState;
+    }
+    
+    function getReward(state) {
+      if (OBSTACLES.some(o => o.x === state.x && o.y === state.y)) {
+        return -10;
+      }
+      if (state.x === GOAL_POS.x && state.y === GOAL_POS.y) {
+        return 100;
+      }
+      // calculate distance to goal
+        const dist = Math.abs(state.x - GOAL_POS.x) + Math.abs(state.y
+    - GOAL_POS.y);
+      return -1 * dist;
+    }
+    
+    // Initialize agents
+    const agentQL = new RLAgent(GRID_WIDTH, GRID_HEIGHT, ACTIONS, 0.1, 0.9, 0.2, 'qlearning');
+    const agentSARSA = new RLAgent(GRID_WIDTH, GRID_HEIGHT, ACTIONS, 0.1, 0.9, 0.2, 'sarsa');
+    
+    // Setup agent step callbacks for visualization
+    agentQL.onStep(position => updateGrid('gridQL', position));
+    agentSARSA.onStep(position => updateGrid('gridSARSA', position));
+    
+    // Charts
+    let chartQL, chartSARSA;
+    
+    function initCharts() {
+      const ctx1 = document.getElementById('chartQL').getContext('2d');
+      const ctx2 = document.getElementById('chartSARSA').getContext('2d');
+      
+      chartQL = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Episode Reward',
+            data: [],
+            borderColor: '#2196F3',
+            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+            tension: 0.1,
+            fill: true,
+            pointRadius: 2,
+            pointBackgroundColor: '#2196F3'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { 
+            legend: { labels: { font: { size: 10 } } },
+            title: { display: false }
+          },
+          scales: { 
+            y: { beginAtZero: true, min: -50, max: 100 },
+            x: { display: false }
+          }
+        }
+      });
+      
+      chartSARSA = new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Episode Reward',
+            data: [],
+            borderColor: '#FF9800',
+            backgroundColor: 'rgba(255, 152, 0, 0.1)',
+            tension: 0.1,
+            fill: true,
+            pointRadius: 2,
+            pointBackgroundColor: '#FF9800'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { 
+            legend: { labels: { font: { size: 10 } } },
+            title: { display: false }
+          },
+          scales: { 
+            y: { beginAtZero: true, min: -50, max: 100 },
+            x: { display: false }
+          }
+        }
+      });
+    }
+    
+    function updateCharts() {
+      const historyQL = agentQL.getRewardHistory();
+      const historySARSA = agentSARSA.getRewardHistory();
+      
+      chartQL.data.labels = historyQL.map((_, i) => i + 1);
+      chartQL.data.datasets[0].data = historyQL;
+      chartQL.update('none');
+      
+      chartSARSA.data.labels = historySARSA.map((_, i) => i + 1);
+      chartSARSA.data.datasets[0].data = historySARSA;
+      chartSARSA.update('none');
+    }
+    
+    async function trainEpisode(agent, agentType) {
+      let state = { x: 0, y: 0 };
+      let action = agent.chooseAction(state);
+      
+      for (let step = 0; step < 100; step++) {
+        const nextState = moveAgent(state, action);
+        const reward = getReward(nextState);
+        const nextAction = agent.chooseAction(nextState);
+        
+        agent.update(state, action, reward, nextState, nextAction);
+        
+        state = nextState;
+        action = nextAction;
+        
+        // Add small delay for visualization
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        if (reward === 100) break;
+      }
+      
+      agent.resetEpisode();
+      updateDisplay(agent, agentType);
+      updateCharts();
+    }
+    
+    async function startTraining(agentType, episodes) {
+      const agent = agentType === 'ql' ? agentQL : agentSARSA;
+      const state = trainingState[agentType];
+      
+      state.running = true;
+      state.totalEpisodes = episodes;
+      state.currentEpisode = 0;
+      
+      const btnTrain = document.getElementById(`btnTrain${agentType.toUpperCase()}`);
+      const btnStop = document.getElementById(`btnStop${agentType.toUpperCase()}`);
+      btnTrain.style.display = 'none';
+      btnStop.style.display = 'block';
+      
+      for (let i = 0; i < episodes; i++) {
+        if (!state.running) break;
+        
+        state.currentEpisode = i + 1;
+        await trainEpisode(agent, agentType);
+        
+        // Update progress
+        const prefix = agentType === 'ql' ? 'QL' : 'SARSA';
+        const progress = (state.currentEpisode / state.totalEpisodes) * 100;
+        document.getElementById(`progress${prefix}`).style.width = progress + '%';
+        document.getElementById(`status${prefix}`).textContent = `Episode ${state.currentEpisode}/${state.totalEpisodes}`;
+      }
+      
+      state.running = false;
+      btnTrain.style.display = 'block';
+      btnStop.style.display = 'none';
+      document.getElementById(`status${agentType === 'ql' ? 'QL' : 'SARSA'}`).textContent = 'Training Complete!';
+    }
+    
+    function stopTraining(agentType) {
+      trainingState[agentType].running = false;
+      const btn = document.getElementById(`btnTrain${agentType.toUpperCase()}`);
+      const btnStop = document.getElementById(`btnStop${agentType.toUpperCase()}`);
+      btn.style.display = 'block';
+      btnStop.style.display = 'none';
+    }
+    
+    function updateDisplay(agent, agentType) {
+      const pos = agent.getAgentPosition();
+      const prefix = agentType === 'ql' ? 'QL' : 'SARSA';
+      const gridId = agentType === 'ql' ? 'gridQL' : 'gridSARSA';
+      
+      updateGrid(gridId, pos);
+      document.getElementById(`ep${prefix}`).textContent = agent.getEpisodeCount();
+      document.getElementById(`pos${prefix}`).textContent = `${pos.x},${pos.y}`;
+      document.getElementById(`rew${prefix}`).textContent = agent.getLastReward();
+      document.getElementById(`episode${prefix === 'QL' ? 'RL' : 'RS'}`).textContent = agent.currentEpisodeReward;
+    }
+    
+    function resetQL() {
+      agentQL.qTable = {};
+      agentQL.episodeCount = 0;
+      agentQL.episodeRewards = [];
+      agentQL.position = { x: 0, y: 0 };
+      agentQL.currentEpisodeReward = 0;
+      updateDisplay(agentQL, 'ql');
+      updateCharts();
+    }
+    
+    function resetSARSA() {
+      agentSARSA.qTable = {};
+      agentSARSA.episodeCount = 0;
+      agentSARSA.episodeRewards = [];
+      agentSARSA.position = { x: 0, y: 0 };
+      agentSARSA.currentEpisodeReward = 0;
+      updateDisplay(agentSARSA, 'sarsa');
+      updateCharts();
+    }
+    
+    // Initialize
+    window.addEventListener('load', () => {
+      createGrid('gridQL');
+      createGrid('gridSARSA');
+      initCharts();
+      updateDisplay(agentQL, 'ql');
+      updateDisplay(agentSARSA, 'sarsa');
+    });
+  </script>
+</body>
+</html>
